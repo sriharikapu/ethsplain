@@ -12,6 +12,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/labstack/echo"
 	//"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -42,14 +43,44 @@ var (
 )
 
 func main() {
-	parse()
-	http.HandleFunc("/", Handler)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	e := echo.New()
+	e.GET("/", func(c echo.Context) error {
+		fmt.Println("base")
+		return c.String(http.StatusOK, string(parse(data, false)))
+	})
+
+	e.GET("/:tx", func(c echo.Context) error {
+		rawTx := c.Param("tx")
+		verbose := c.QueryParam("verbxose")
+		v := false
+		if verbose == "true" {
+			v = true
+		}
+
+		fmt.Println("TX blah,", rawTx)
+		return c.String(http.StatusOK, string(parse(rawTx, v)))
+		//return c.String(http.StatusOK, string(parse(data)))
+		//return c.String(http.StatusOK, string("HELLO"))
+	})
+	/*
+		e.GET("/tx/:tx", func(c echo.Context) error {
+			rawTx := c.QueryParam("tx")
+			fmt.Println("tx:", rawTx)
+
+			return c.String(http.StatusOK, string(parse(rawTx)))
+			//fmt.Println("A")
+			//return c.String(http.StatusOK, string(parse(data)))
+		})
+	*/
+	e.Logger.Fatal(e.Start(":8080"))
+	//parse()
+	//http.HandleFunc("/", Handler)
+	//log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-func parse() []byte {
+func parse(rawTx string, verbose bool) []byte {
 
-	str := strings.TrimPrefix(data, "0x")
+	str := strings.TrimPrefix(rawTx, "0x")
 	tx := &types.Transaction{}
 	buf, err := hex.DecodeString(str)
 	if err != nil {
@@ -64,7 +95,7 @@ func parse() []byte {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("tx:", tx)
+	//fmt.Println("tx:", tx)
 
 	// Because we rely on geth to parse the tx earlier
 	// we can make this parser really dumb because we know it is in
@@ -77,11 +108,11 @@ func parse() []byte {
 
 	tx.Nonce()
 	//tmp := make([]byte, 10)
-	encNonce, err := rlp.EncodeToBytes(tx.Nonce())
+	//encNonce, err := rlp.EncodeToBytes(tx.Nonce())
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("HEX; ", hex.EncodeToString(encNonce))
+	//fmt.Println("HEX; ", hex.EncodeToString(encNonce))
 
 	// We find the overall rlp prefix by reading until we find the nonce
 	//prefix := buf[:bytes.Index(buf, encNonce)]
@@ -89,18 +120,18 @@ func parse() []byte {
 	//splain.addNode(prefix)
 	//addRLPNode(&splain, prefix)
 
-	splain.addNode(tx.Nonce(), NONCE)
-	splain.addNode(tx.GasPrice().Bytes(), GAS_PRICE)
-	splain.addNode(tx.Gas(), GAS_LIMIT)
-	splain.addNode(tx.To().Bytes(), RECIPIENT)
-	splain.addNode(tx.Value().Bytes(), VALUE)
-	splain.addNode(tx.Data(), DATA)
+	splain.addNode(tx.Nonce(), NONCE, verbose)
+	splain.addNode(tx.GasPrice().Bytes(), GAS_PRICE, verbose)
+	splain.addNode(tx.Gas(), GAS_LIMIT, verbose)
+	splain.addNode(tx.To().Bytes(), RECIPIENT, verbose)
+	splain.addNode(tx.Value().Bytes(), VALUE, verbose)
+	splain.addNode(tx.Data(), DATA, verbose)
 	sigV, sigR, sigS := tx.RawSignatureValues()
-	splain.addNode(sigV.Bytes(), SIG_V)
-	splain.addNode(sigR.Bytes(), SIG_R)
-	splain.addNode(sigS.Bytes(), SIG_S)
+	splain.addNode(sigV.Bytes(), SIG_V, verbose)
+	splain.addNode(sigR.Bytes(), SIG_R, verbose)
+	splain.addNode(sigS.Bytes(), SIG_S, verbose)
 	out, _ := json.MarshalIndent(splain, "", "	")
-	fmt.Println(string(out))
+	//fmt.Println(string(out))
 
 	concat := ""
 	for _, tok := range splain.Tokens {
@@ -122,13 +153,16 @@ func parse() []byte {
 
 }
 
-func (s *Splain) addNode(val interface{}, f field) {
+func (s *Splain) addNode(val interface{}, f field, verbose bool) {
 
 	enc, err := rlp.EncodeToBytes(val)
 	if err != nil {
 		log.Fatal(err)
 	}
-	i := addRLPNode(s, enc)
+	i := 0
+	if verbose {
+		i = addRLPNode(s, enc)
+	}
 
 	// add the value node skipping however long the prefix was
 	var tok Token

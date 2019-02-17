@@ -69,9 +69,9 @@ const Home = ({ response = sampleResponse }) => {
   )
 }
 
-Home.getInitialProps = async ({ }) => {
+Home.getInitialProps = async ({ req, query: { tx } }) => {
   try {
-  const res = await fetch('http://localhost:8080')
+  const res = await fetch(`http://localhost:8080/${tx}`)
   const json = await res.text()
   console.log(json)
     return { response: JSON.parse(json) }
