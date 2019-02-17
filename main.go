@@ -13,15 +13,14 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/labstack/echo"
-	//"github.com/ethereum/go-ethereum/rlp"
 )
 
-// Splain sthoeuhstohu
+// Splain contains all of the parsed tokens in the transaction
 type Splain struct {
 	Tokens []Token
 }
 
-// Token why can't you just be happy linter
+// Token contains all the visible fields for each token
 type Token struct {
 	Hex  string
 	Text string
@@ -43,38 +42,29 @@ var (
 )
 
 func main() {
+	// start simple server
 	e := echo.New()
 	e.GET("/", func(c echo.Context) error {
-		fmt.Println("base")
 		return c.String(http.StatusOK, string(parse(data, false)))
 	})
 
 	e.GET("/:tx", func(c echo.Context) error {
 		rawTx := c.Param("tx")
 		verbose := c.QueryParam("verbose")
+		fmt.Println("verbose", verbose)
 		v := false
 		if verbose == "true" {
 			v = true
 		}
 
-		fmt.Println("TX blah,", rawTx)
-		fmt.Println("verbose:", verbose, v)
+		// fetch rawTx from etherscan if it looks like we have a tx hash instead of a raw tx
+		if len(rawTx) < 100 {
+			rawTx = strings.TrimSpace(etherscanCrawlRaw(rawTx))
+		}
+
 		return c.String(http.StatusOK, string(parse(rawTx, v)))
 	})
-	/*
-		e.GET("/tx/:tx", func(c echo.Context) error {
-			rawTx := c.QueryParam("tx")
-			fmt.Println("tx:", rawTx)
-
-			return c.String(http.StatusOK, string(parse(rawTx)))
-			//fmt.Println("A")
-			//return c.String(http.StatusOK, string(parse(data)))
-		})
-	*/
 	e.Logger.Fatal(e.Start(":8080"))
-	//parse()
-	//http.HandleFunc("/", Handler)
-	//log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 func parse(rawTx string, verbose bool) []byte {
@@ -86,24 +76,14 @@ func parse(rawTx string, verbose bool) []byte {
 		log.Fatal(err)
 	}
 
-	fmt.Println("start")
 	r := bytes.NewReader(buf)
 	s := rlp.NewStream(r, 0)
-	fmt.Println("predecode")
 	err = tx.DecodeRLP(s)
 	if err != nil {
 		log.Fatal(err)
 	}
-	//fmt.Println("tx:", tx)
-
-	// Because we rely on geth to parse the tx earlier
-	// we can make this parser really dumb because we know it is in
-	// standard tx format
-
-	//tx.To
 
 	splain := Splain{}
-	//var tok Token
 
 	tx.Nonce()
 	//tmp := make([]byte, 10)
@@ -111,13 +91,6 @@ func parse(rawTx string, verbose bool) []byte {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//fmt.Println("HEX; ", hex.EncodeToString(encNonce))
-
-	// We find the overall rlp prefix by reading until we find the nonce
-	//prefix := buf[:bytes.Index(buf, encNonce)]
-	//fmt.Println("PREFIX:", hex.EncodeToString(prefix))
-	//splain.addNode(prefix)
-	//addRLPNode(&splain, prefix)
 
 	splain.addNode(tx.Nonce(), NONCE, verbose)
 	splain.addNode(tx.GasPrice().Bytes(), GAS_PRICE, verbose)
@@ -130,8 +103,8 @@ func parse(rawTx string, verbose bool) []byte {
 	splain.addNode(sigR.Bytes(), SIG_R, verbose)
 	splain.addNode(sigS.Bytes(), SIG_S, verbose)
 	out, _ := json.MarshalIndent(splain, "", "	")
-	//fmt.Println(string(out))
 
+	// debug
 	concat := ""
 	for _, tok := range splain.Tokens {
 		concat += tok.Hex
@@ -139,17 +112,6 @@ func parse(rawTx string, verbose bool) []byte {
 	fmt.Println("concat", concat)
 
 	return out
-
-	// convert value to bytes
-	// rlp encode it
-	// if it is larger than originally, pass the prefix to rlpExplain
-
-	// start at beginning of raw
-	// 2 walking pointers
-	// one at start
-	// walk until we get a match on the rlp encoding of the first field
-	// th
-
 }
 
 func (s *Splain) addNode(val interface{}, f field, verbose bool) {
@@ -370,4 +332,7 @@ func rlpExplain(buf []byte) string {
 	return ""
 }
 
-var data = "0xf8aa0185012a05f2008327c50e9435fb136cbadbc168910b66a9f7c40b03e4bd467f80b8441e9a695000000000000000000000000035fb136cbadbc168910b66a9f7c40b03e4bd467f000000000000000000000000000000000000000000000000000000003b9aca0026a00320143282b77654f3eedf2c6d384346a4be52c902f6603227f8f0220d30aa35a076ea8a4947327f33e149ec928efd6efa9e49aafe89a189abae7aad599c5feef2"
+var data = "0xf89182032d8504a817c80082fe90940b95993a39a363d99280ac950f5e4536ab5c5566871550f7dca70000a41a6952300000000000000000000000001b46d8845f5a30447f182ac925c7da8b65a0124a26a0df820a48d3a6cd4e986b00a601138a1a7d0969334edd1ec1e2f6ad3c6890a468a0573ca6ccd5dc1eab646aa996c8fa7c6f1ec3256d2d051e0f2a0a04e0066025b6"
+
+// example txhash = 0x9a7c62249dc4d4df8ce424c256fe4e57c06fb8b45101b43384db00a1d73799b5
+//var data = "0xf8aa0185012a05f2008327c50e9435fb136cbadbc168910b66a9f7c40b03e4bd467f80b8441e9a695000000000000000000000000035fb136cbadbc168910b66a9f7c40b03e4bd467f000000000000000000000000000000000000000000000000000000003b9aca0026a00320143282b77654f3eedf2c6d384346a4be52c902f6603227f8f0220d30aa35a076ea8a4947327f33e149ec928efd6efa9e49aafe89a189abae7aad599c5feef2"
