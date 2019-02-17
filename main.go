@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"net/http"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/core/types"
@@ -42,11 +43,11 @@ var (
 
 func main() {
 	parse()
+	http.HandleFunc("/", Handler)
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 func parse() []byte {
-	//http.HandleFunc("/", tokenize)
-	//log.Fatal(httpListenAndServe(":8080", nil))
 
 	str := strings.TrimPrefix(data, "0x")
 	tx := &types.Transaction{}

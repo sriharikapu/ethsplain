@@ -1,6 +1,7 @@
 import './ethsplain.css'
 import React, { useEffect } from 'react'
 import cuid from 'cuid'
+import fetch from 'isomorphic-fetch'
 
 const sampleResponse = {
   'tokens': [
@@ -46,7 +47,8 @@ const sampleResponse = {
   ]
 }
 
-export default ({ response = sampleResponse }) => {
+const Home = ({ response = sampleResponse }) => {
+  console.log('Home response', response)
   useEffect(() => {
     process.browser && window.init()
   }, [])
@@ -55,14 +57,31 @@ export default ({ response = sampleResponse }) => {
     <>
       <svg id='canvas' />
       <div id='command'>
-        { response.tokens.map((token, i) => <span key={cuid()} className='command0' helpref={`help-${i}`}><a>{token.hex}</a></span>)}
+        { response.Tokens.map((token, i) => <span key={cuid()} className='command0' helpref={`help-${i}`}><a>{token.Hex}</a></span>)}
       </div>
-      <div style={{ height: response.tokens.length * 10 + 'px' }} />
+      <div style={{ height: response.Tokens.length * 10 + 'px' }} />
       <div id='help'>
-        {response.tokens.map(({ text, more }, i) => (
-          <pre key={cuid()} id={`help-${i}`} className='help-box help-synopsis'>{text}<br />{more}</pre>
+        {response.Tokens.map(({ Text, More }, i) => (
+          <pre key={cuid()} id={`help-${i}`} className='help-box help-synopsis'>{Text}<br />{More}</pre>
         ))}
       </div>
     </>
   )
 }
+
+Home.getInitialProps = async ({ }) => {
+  try {
+  const res = await fetch('http://localhost:8080')
+  const json = await res.text()
+  console.log(json)
+    return { response: JSON.parse(json) }
+  } catch (e) {
+    console.log(e)
+    return {}
+  }
+  return { }
+}
+
+
+export default Home
+
