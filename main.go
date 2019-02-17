@@ -51,16 +51,15 @@ func main() {
 
 	e.GET("/:tx", func(c echo.Context) error {
 		rawTx := c.Param("tx")
-		verbose := c.QueryParam("verbxose")
+		verbose := c.QueryParam("verbose")
 		v := false
 		if verbose == "true" {
 			v = true
 		}
 
 		fmt.Println("TX blah,", rawTx)
+		fmt.Println("verbose:", verbose, v)
 		return c.String(http.StatusOK, string(parse(rawTx, v)))
-		//return c.String(http.StatusOK, string(parse(data)))
-		//return c.String(http.StatusOK, string("HELLO"))
 	})
 	/*
 		e.GET("/tx/:tx", func(c echo.Context) error {
@@ -172,17 +171,17 @@ func (s *Splain) addNode(val interface{}, f field, verbose bool) {
 	var txt, more string
 	switch f {
 	case NONCE:
-		txt, more = nonceInfo(val)
+		txt, more = nonceInfo(val, verbose)
 	case GAS_PRICE:
-		txt, more = gasPriceInfo(val)
+		txt, more = gasPriceInfo(val, verbose)
 	case GAS_LIMIT:
-		txt, more = gasLimitInfo(val)
+		txt, more = gasLimitInfo(val, verbose)
 	case RECIPIENT:
-		txt, more = recipientInfo(val)
+		txt, more = recipientInfo(val, verbose)
 	case VALUE:
 		txt, more = valueInfo(val)
 	case DATA:
-		txt, more = dataInfo(val)
+		txt, more = dataInfo(val, verbose)
 	case SIG_V:
 		txt, more = sigVInfo(val)
 	case SIG_R:
@@ -206,32 +205,52 @@ func (s *Splain) addNode(val interface{}, f field, verbose bool) {
 
 }
 
-func nonceInfo(val interface{}) (string, string) {
+func nonceInfo(val interface{}, verbose bool) (string, string) {
 
 	i, _ := val.(uint64)
 	txt := fmt.Sprintf("Nonce: %d", i)
-	more := "The nonce is a sequence number issued my the transaction creator used to prevent message replay. The nonce of each transaction of an account must be exactly 1 greater than the previous nonce used. The Ethereum yellow paper defines the nonce as 'A scalar value equal to the number of transactions sent from this address or, in the case of accounts with associated code, the number of contract-creations made by this account"
+	more := shortNonce
+	if verbose {
+		more = verboseNonce
+	}
 
 	return txt, more
 }
 
-func gasPriceInfo(val interface{}) (string, string) {
+var verboseNonce = "The nonce is a sequence number issued my the transaction creator used to prevent message replay. The nonce of each transaction of an account must be exactly 1 greater than the previous nonce used. The Ethereum yellow paper defines the nonce as 'A scalar value equal to the number of transactions sent from this address or, in the case of accounts with associated code, the number of contract-creations made by this account"
+
+var shortNonce = "The nonce is an incrementing sequence number used to prevent message replay"
+
+func gasPriceInfo(val interface{}, verbose bool) (string, string) {
 	buf, _ := val.([]byte)
 	i := big.NewInt(0).SetBytes(buf)
 
 	txt := fmt.Sprintf("Gas Price: %s", i.String())
-	more := "The price of gas (in wei) that the sender is willing to pay. Gas is purchased with ether and serves to protect the limited resources of the network (computation, memory, and storage). The amount of ether spent for gas can be calculated by multiplying the Gas Price by the amount of gas consumed in the transaction (21000 gas for a standard transaction)"
+	more := shortGasPrice
+	if verbose {
+		more = verboseGasPrice
+	}
 	return txt, more
 }
 
-func gasLimitInfo(val interface{}) (string, string) {
+var shortGasPrice = "The price of gas (in wei) that the sender is willing to pay."
+var verboseGasPrice = "The price of gas (in wei) that the sender is willing to pay. Gas is purchased with ether and serves to protect the limited resources of the network (computation, memory, and storage). The amount of ether spent for gas can be calculated by multiplying the Gas Price by the amount of gas consumed in the transaction (21000 gas for a standard transaction)"
+
+func gasLimitInfo(val interface{}, verbose bool) (string, string) {
 	i := val.(uint64)
 	txt := fmt.Sprintf("Gas Limit: %d", i)
-	more := "The maximum amount of gas the originator is willing to pay for this transaction. The amount of gas consumed depends on how much computation your transaction requires."
+	more := shortGasLimit
+	if verbose {
+		more = verboseGasLimit
+	}
+
 	return txt, more
 }
 
-func recipientInfo(val interface{}) (string, string) {
+var shortGasLimit = "The maximum amount of gas the originator is willing to pay for this transaction."
+var verboseGasLimit = "The maximum amount of gas the originator is willing to pay for this transaction. The amount of gas consumed depends on how much computation your transaction requires."
+
+func recipientInfo(val interface{}, verbose bool) (string, string) {
 	addrBytes := val.([]byte)
 	if len(addrBytes) == 0 || (len(addrBytes) == 1 && addrBytes[0] == 0x0) {
 		txt := fmt.Sprintf("Recipient Address: 0x0")
@@ -239,13 +258,19 @@ func recipientInfo(val interface{}) (string, string) {
 		return txt, more
 	}
 	txt := fmt.Sprintf("Recipient Address: 0x%s", hex.EncodeToString(addrBytes))
-	more := `An ethereum address is generated with the following steps
-1. Generate a public key by multiplying the private key 'k' by the Ethereum generator point G. The public key is the concatenated x + y coordinate of the result of this multiplication
-2. Take the Keccak-256 hash of that public key 
-3. Take the last 20 bytes of that hash and encode to hexidecimal.`
+	more := shortTo
+	if verbose {
+		more = verboseTo
+	}
 
 	return txt, more
 }
+
+var shortTo = "The address of the user account or contract to interact with"
+var verboseTo = `An ethereum address is generated with the following steps
+1. Generate a public key by multiplying the private key 'k' by the Ethereum generator point G. The public key is the concatenated x + y coordinate of the result of this multiplication
+2. Take the Keccak-256 hash of that public key 
+3. Take the last 20 bytes of that hash and encode to hexidecimal.`
 
 func valueInfo(val interface{}) (string, string) {
 	buf, _ := val.([]byte)
@@ -256,19 +281,25 @@ func valueInfo(val interface{}) (string, string) {
 	return txt, more
 }
 
-func dataInfo(val interface{}) (string, string) {
+func dataInfo(val interface{}, verbose bool) (string, string) {
 	buf, _ := val.([]byte)
 
 	txt := fmt.Sprintf("Data: %s", hex.EncodeToString(buf))
-	more := "Data being sent to a contract function. The first 4 bytes are known as the 'function selector'. The remaining data represents arguments to the chosen function"
+	more := shortData
+	if verbose {
+		more = verboseData
+	}
 	return txt, more
 }
+
+var verboseData = "Data being sent to a contract function. The first 4 bytes are known as the 'function selector'. The remaining data represents arguments to the chosen function"
+var shortData = "Data being sent to a contract function. The first 4 bytes are known as the 'function selector'"
 
 func sigVInfo(val interface{}) (string, string) {
 	buf, _ := val.([]byte)
 
 	txt := fmt.Sprintf("Signature Prefix Value (v): %s", hex.EncodeToString(buf))
-	more := "Indicates both the chainID of the transaction as well as the parity (odd or even) of the y component of the public key"
+	more := "Indicates both the chainID of the transaction and the parity (odd or even) of the y component of the public key"
 	return txt, more
 }
 
@@ -307,8 +338,8 @@ func addRLPNode(s *Splain, enc []byte) int {
 	// "string" value of length 0-55
 	if prefix <= 0xB7 && length > int(prefix-0x80) {
 		node.Hex = Hex([]byte{prefix})
-		node.Text = "RLP Length Prefix. The next field is an RLP 'string' of length FIXME"
-		node.More = "Specific RLP Rule being used"
+		node.Text = fmt.Sprintf("RLP Length Prefix. The next field is an RLP 'string' of length 0x%x - 0x80", prefix)
+		node.More = ""
 		s.Tokens = append(s.Tokens, node)
 		return 1
 	}
@@ -318,8 +349,8 @@ func addRLPNode(s *Splain, enc []byte) int {
 		l := prefix - 0xb7
 		flen := enc[1 : 1+l]
 		node.Hex = Hex(append([]byte{prefix}, flen...))
-		node.Text = "RLP Length Prefix. The next field is an RLP 'string' of length FIIXXX"
-		node.More = "Stuff about the length of the length turtles all the way down"
+		node.Text = fmt.Sprintf("RLP Length Prefix. The next field is an RLP 'string' of length %s", hex.EncodeToString(flen))
+		node.More = fmt.Sprintf("The first byte 0x%x tells us the length of the length 0x%s of the next field", prefix, hex.EncodeToString(flen))
 		return 1 + len(flen)
 
 	}
