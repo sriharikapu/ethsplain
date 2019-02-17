@@ -51,7 +51,7 @@ func main() {
 	e.GET("/:tx", func(c echo.Context) error {
 		rawTx := c.Param("tx")
 		verbose := c.QueryParam("verbose")
-		fmt.Println("verbose", verbose)
+		//fmt.Println("verbose", verbose)
 		v := false
 		if verbose == "true" {
 			v = true
@@ -61,6 +61,9 @@ func main() {
 		if len(rawTx) < 100 {
 			rawTx = strings.TrimSpace(etherscanCrawlRaw(rawTx))
 		}
+		if len(rawTx) < 100 {
+			return c.String(http.StatusBadRequest, "")
+		}
 
 		return c.String(http.StatusOK, string(parse(rawTx, v)))
 	})
@@ -68,6 +71,7 @@ func main() {
 }
 
 func parse(rawTx string, verbose bool) []byte {
+	fmt.Println(rawTx)
 
 	str := strings.TrimPrefix(rawTx, "0x")
 	tx := &types.Transaction{}
@@ -85,32 +89,34 @@ func parse(rawTx string, verbose bool) []byte {
 
 	splain := Splain{}
 
-	tx.Nonce()
-	//tmp := make([]byte, 10)
-	//encNonce, err := rlp.EncodeToBytes(tx.Nonce())
-	if err != nil {
-		log.Fatal(err)
-	}
+	// special case for the first rlp node before the nonce
+	var tok Token
+	prefix := buf[0]
+	l := buf[0] - 0xf7
+	flen := buf[1 : 1+l]
+	tok.Hex = Hex(append([]byte{prefix}, flen...))
+	tok.Text = fmt.Sprintf("RLP Prefix. Tells us that this transaction is a list of length 0x%s (%d bytes)", hex.EncodeToString(flen), uint64(flen[0])) // TODO: extend for larger txs
+	tok.More = fmt.Sprintf("The first byte (0x%x-0xf7) tells us the length of the length (0x%s) of transaction", prefix, hex.EncodeToString(flen))
+	splain.Tokens = append(splain.Tokens, tok)
 
+	// Tokenize transaction fields and their encoding prefixes
 	splain.addNode(tx.Nonce(), NONCE, verbose)
 	splain.addNode(tx.GasPrice().Bytes(), GAS_PRICE, verbose)
 	splain.addNode(tx.Gas(), GAS_LIMIT, verbose)
-	splain.addNode(tx.To().Bytes(), RECIPIENT, verbose)
+	// contract creation edgecase
+	if tx.To() != nil {
+		splain.addNode(tx.To().Bytes(), RECIPIENT, verbose)
+	} else {
+		splain.addNode([]byte{}, RECIPIENT, verbose)
+	}
 	splain.addNode(tx.Value().Bytes(), VALUE, verbose)
 	splain.addNode(tx.Data(), DATA, verbose)
 	sigV, sigR, sigS := tx.RawSignatureValues()
 	splain.addNode(sigV.Bytes(), SIG_V, verbose)
 	splain.addNode(sigR.Bytes(), SIG_R, verbose)
 	splain.addNode(sigS.Bytes(), SIG_S, verbose)
+
 	out, _ := json.MarshalIndent(splain, "", "	")
-
-	// debug
-	concat := ""
-	for _, tok := range splain.Tokens {
-		concat += tok.Hex
-	}
-	fmt.Println("concat", concat)
-
 	return out
 }
 
@@ -214,9 +220,10 @@ var verboseGasLimit = "The maximum amount of gas the originator is willing to pa
 
 func recipientInfo(val interface{}, verbose bool) (string, string) {
 	addrBytes := val.([]byte)
-	if len(addrBytes) == 0 || (len(addrBytes) == 1 && addrBytes[0] == 0x0) {
+	//if len(addrBytes) == 0 || (len(addrBytes) == 1 && addrBytes[0] == 0x0) {
+	if len(addrBytes) == 0 {
 		txt := fmt.Sprintf("Recipient Address: 0x0")
-		more := "This transaction is a special type of transaction for Contract Creation. Notice how the address is the Zero Address 0x0. This signals contract creation."
+		more := "This transaction is a special type of transaction for Contract Creation. Notice the address is the Zero Address 0x0"
 		return txt, more
 	}
 	txt := fmt.Sprintf("Recipient Address: 0x%s", hex.EncodeToString(addrBytes))
@@ -294,7 +301,6 @@ func addRLPNode(s *Splain, enc []byte) int {
 	prefix := enc[0]
 	// This is a single byte value that is its own rlp encoding so no node to add
 	if prefix <= 0x7F {
-		fmt.Println("Single Byte", enc)
 		return 0
 	}
 	// "string" value of length 0-55
@@ -311,8 +317,9 @@ func addRLPNode(s *Splain, enc []byte) int {
 		l := prefix - 0xb7
 		flen := enc[1 : 1+l]
 		node.Hex = Hex(append([]byte{prefix}, flen...))
-		node.Text = fmt.Sprintf("RLP Length Prefix. The next field is an RLP 'string' of length %s", hex.EncodeToString(flen))
-		node.More = fmt.Sprintf("The first byte 0x%x tells us the length of the length 0x%s of the next field", prefix, hex.EncodeToString(flen))
+		node.Text = fmt.Sprintf("RLP Length Prefix. The next field is an RLP 'string' of length 0x%s", hex.EncodeToString(flen))
+		node.More = fmt.Sprintf("The first byte (0x%x-0x80) tells us the length of the length (0x%s) of the next field", prefix, hex.EncodeToString(flen))
+		s.Tokens = append(s.Tokens, node)
 		return 1 + len(flen)
 
 	}

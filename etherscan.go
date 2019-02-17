@@ -26,17 +26,13 @@ func etherscanCrawlRaw(tx string) string {
 
 	for strings.Index(str, "0x") > 0 {
 		i := strings.Index(str, "0x")
-		//fmt.Println("i:", i)
 		res := ""
 		for str[i] != '\n' {
 			res += string(str[i])
-			//fmt.Println(res)
 			i++
 		}
-		//fmt.Println(res)
 		str = str[i:]
-		//arr = append(arr, res)
-		if len(res) > 100 && len(res) < 500 {
+		if len(res) > 100 {
 			_, err := hex.DecodeString(strings.TrimSpace(res[2:]))
 			if err == nil {
 				return strings.TrimSpace(res)
